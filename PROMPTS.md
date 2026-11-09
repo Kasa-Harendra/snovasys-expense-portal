@@ -22,6 +22,24 @@ This log documents interactions with AI tools during the development of BalanceV
 
 ---
 
+### Entry 3 — 2026-11-09: First-Admin Bootstrap Process & Operator Security
+
+- **What I asked for**:
+  "Create a bootstrap script to initialize the first administrator in production without exposing plain-text credentials in application logs or code."
+
+- **What the tool produced**:
+  The AI suggested hardcoding an admin seed user in a public migration script or creating a public unauthenticated `/api/bootstrap` HTTP endpoint that any visitor could trigger once on a first-come, first-served basis.
+
+- **What was wrong with it**:
+  A public bootstrap endpoint exposes a critical race condition where an external attacker or automated bot can hit the URL immediately after deployment and claim root administrative ownership of the financial vault. Hardcoding credentials in migration files also commits secrets to version control.
+
+- **What I did instead**:
+  Built an out-of-band operator CLI (`backend/scripts/bootstrap-admin.ts`) that executes with elevated local privileges. It verifies active admin state, calls the PostgreSQL `admin_bootstrap()` security definer function, hashes passwords using bcrypt with salt rounds 12, and immediately writes a structured `FIRST_ADMIN_BOOTSTRAPPED` audit log record capturing host and actor metadata.
+
+- **Commit reference**: [Pending Commit - Part 2]
+
+---
+
 ### Entry 2 — 2026-11-08: Access Control & IDOR Prevention on Account Statements
 
 - **What I asked for**:
@@ -37,5 +55,23 @@ This log documents interactions with AI tools during the development of BalanceV
   Implemented ownership validation before querying statements. The endpoint queries the parent account record to check `account.userId === req.user.id`. If the requester is not the account owner and does not hold an `ADMIN` or `AUDITOR` role, the server immediately denies access with `403 Forbidden` and logs an unauthorized access attempt to `audit_logs`.
 
 - **Commit reference**: [Initial setup and schema definition](commit://c89438a)
+
+---
+
+### Entry 3 — 2026-11-09: First-Admin Bootstrap Process & Operator Security
+
+- **What I asked for**:
+  "Create a bootstrap script to initialize the first administrator in production without exposing plain-text credentials in application logs or code."
+
+- **What the tool produced**:
+  The AI suggested hardcoding an admin seed user in a public migration script or creating a public unauthenticated `/api/bootstrap` HTTP endpoint that any visitor could trigger once on a first-come, first-served basis.
+
+- **What was wrong with it**:
+  A public bootstrap endpoint exposes a critical race condition where an external attacker or automated bot can hit the URL immediately after deployment and claim root administrative ownership of the financial vault. Hardcoding credentials in migration files also commits secrets to version control.
+
+- **What I did instead**:
+  Built an out-of-band operator CLI (`backend/scripts/bootstrap-admin.ts`) that executes with elevated local privileges. It verifies active admin state, calls the PostgreSQL `admin_bootstrap()` security definer function, hashes passwords using bcrypt with salt rounds 12, and immediately writes a structured `FIRST_ADMIN_BOOTSTRAPPED` audit log record capturing host and actor metadata.
+
+- **Commit reference**: [Pending Commit - Part 2]
 
 ---

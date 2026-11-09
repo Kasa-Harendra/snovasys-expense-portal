@@ -11,6 +11,7 @@
     "db:generate": "npm --workspace=backend run db:generate",
     "db:migrate": "npm --workspace=backend run db:migrate",
     "db:seed": "npm --workspace=backend run db:seed",
+    "bootstrap:admin": "npm --workspace=backend run bootstrap:admin",
     "dev:backend": "npm --workspace=backend run dev",
     "dev:frontend": "npm --workspace=frontend run dev",
     "dev": "concurrently -k -p \"[{name}]\" -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
