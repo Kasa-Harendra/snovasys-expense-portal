@@ -54,7 +54,25 @@ This log documents interactions with AI tools during the development of BalanceV
 - **What I did instead**:
   Implemented server-side enforcement where the authentication controller checks `user.isActive` prior to issuing tokens. Added a comprehensive test suite (`backend/tests/auth.test.ts`) that verifies successful admin login, invalid password error handling (preventing enumeration), JWT cryptographic signature and claim verification, inactive account rejection with HTTP 403, and Redis sliding-window rate limit headers.
 
-- **Commit reference**: [Pending Commit - Part 3]
+- **Commit reference**: [test: add automated authentication test suite](commit://91f1ff6)
+
+---
+
+### Entry 5 — 2026-11-09: End-to-End Registration & Account Onboarding Workflow
+
+- **What I asked for**:
+  "Implement and test the customer registration and onboarding flow where a user registers, receives an initial personal account, requests an additional business account, and the admin approves it."
+
+- **What the tool produced**:
+  The AI produced a single-step mock function that inserted a new account directly without enforcing the pending request lifecycle, approval queues, or transactional atomicity.
+
+- **What was wrong with it**:
+  In a regulated banking ledger, accounts cannot simply appear without an audited state transition. The customer must submit an `AccountRequest` with `status: 'PENDING'`. An administrator must inspect the queue, approve or reject the request, specify the unique account number, and atomically provision the account record within a database transaction.
+
+- **What I did instead**:
+  Built complete lifecycle endpoints: `POST /api/account-requests` to create requests, `GET /api/account-requests/admin/queue` for admin review, and `POST /api/account-requests/admin/:id/approve` executed inside a PostgreSQL transaction (`prisma.$transaction`). Created an end-to-end integration test (`backend/tests/onboarding.test.ts`) that verifies the complete lifecycle from registration to approval and balance inspection.
+
+- **Commit reference**: [Pending Commit - Part 4]
 
 ---
 
@@ -108,6 +126,24 @@ This log documents interactions with AI tools during the development of BalanceV
 - **What I did instead**:
   Implemented server-side enforcement where the authentication controller checks `user.isActive` prior to issuing tokens. Added a comprehensive test suite (`backend/tests/auth.test.ts`) that verifies successful admin login, invalid password error handling (preventing enumeration), JWT cryptographic signature and claim verification, inactive account rejection with HTTP 403, and Redis sliding-window rate limit headers.
 
-- **Commit reference**: [Pending Commit - Part 3]
+- **Commit reference**: [test: add automated authentication test suite](commit://91f1ff6)
+
+---
+
+### Entry 5 — 2026-11-09: End-to-End Registration & Account Onboarding Workflow
+
+- **What I asked for**:
+  "Implement and test the customer registration and onboarding flow where a user registers, receives an initial personal account, requests an additional business account, and the admin approves it."
+
+- **What the tool produced**:
+  The AI produced a single-step mock function that inserted a new account directly without enforcing the pending request lifecycle, approval queues, or transactional atomicity.
+
+- **What was wrong with it**:
+  In a regulated banking ledger, accounts cannot simply appear without an audited state transition. The customer must submit an `AccountRequest` with `status: 'PENDING'`. An administrator must inspect the queue, approve or reject the request, specify the unique account number, and atomically provision the account record within a database transaction.
+
+- **What I did instead**:
+  Built complete lifecycle endpoints: `POST /api/account-requests` to create requests, `GET /api/account-requests/admin/queue` for admin review, and `POST /api/account-requests/admin/:id/approve` executed inside a PostgreSQL transaction (`prisma.$transaction`). Created an end-to-end integration test (`backend/tests/onboarding.test.ts`) that verifies the complete lifecycle from registration to approval and balance inspection.
+
+- **Commit reference**: [Pending Commit - Part 4]
 
 ---
