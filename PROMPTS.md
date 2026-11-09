@@ -36,7 +36,25 @@ This log documents interactions with AI tools during the development of BalanceV
 - **What I did instead**:
   Built an out-of-band operator CLI (`backend/scripts/bootstrap-admin.ts`) that executes with elevated local privileges. It verifies active admin state, calls the PostgreSQL `admin_bootstrap()` security definer function, hashes passwords using bcrypt with salt rounds 12, and immediately writes a structured `FIRST_ADMIN_BOOTSTRAPPED` audit log record capturing host and actor metadata.
 
-- **Commit reference**: [Pending Commit - Part 2]
+- **Commit reference**: [feat: implement secure first-admin bootstrap process](commit://68880f8)
+
+---
+
+### Entry 4 — 2026-11-09: Admin Authentication, Token Claims & User Deactivation
+
+- **What I asked for**:
+  "Write an automated test script to verify admin login and ensure deactivated users cannot access the API even if they know the password."
+
+- **What the tool produced**:
+  The AI wrote a test checking only that a JWT token string was returned, without asserting token structure, claims (`sub`, `role`, `iss`, `aud`), or expiration bounds. For deactivation, it suggested checking `user.isActive` in client-side state after login.
+
+- **What was wrong with it**:
+  Client-side checking of account status is completely ineffective against API-level attacks. If an administrator disables a rogue user account, the API must reject login immediately with HTTP 403 `account_inactive` and disallow token generation. Furthermore, tests must cryptographically verify that JWT claims encode the correct RBAC role (`ADMIN`).
+
+- **What I did instead**:
+  Implemented server-side enforcement where the authentication controller checks `user.isActive` prior to issuing tokens. Added a comprehensive test suite (`backend/tests/auth.test.ts`) that verifies successful admin login, invalid password error handling (preventing enumeration), JWT cryptographic signature and claim verification, inactive account rejection with HTTP 403, and Redis sliding-window rate limit headers.
+
+- **Commit reference**: [Pending Commit - Part 3]
 
 ---
 
@@ -72,6 +90,24 @@ This log documents interactions with AI tools during the development of BalanceV
 - **What I did instead**:
   Built an out-of-band operator CLI (`backend/scripts/bootstrap-admin.ts`) that executes with elevated local privileges. It verifies active admin state, calls the PostgreSQL `admin_bootstrap()` security definer function, hashes passwords using bcrypt with salt rounds 12, and immediately writes a structured `FIRST_ADMIN_BOOTSTRAPPED` audit log record capturing host and actor metadata.
 
-- **Commit reference**: [Pending Commit - Part 2]
+- **Commit reference**: [feat: implement secure first-admin bootstrap process](commit://68880f8)
+
+---
+
+### Entry 4 — 2026-11-09: Admin Authentication, Token Claims & User Deactivation
+
+- **What I asked for**:
+  "Write an automated test script to verify admin login and ensure deactivated users cannot access the API even if they know the password."
+
+- **What the tool produced**:
+  The AI wrote a test checking only that a JWT token string was returned, without asserting token structure, claims (`sub`, `role`, `iss`, `aud`), or expiration bounds. For deactivation, it suggested checking `user.isActive` in client-side state after login.
+
+- **What was wrong with it**:
+  Client-side checking of account status is completely ineffective against API-level attacks. If an administrator disables a rogue user account, the API must reject login immediately with HTTP 403 `account_inactive` and disallow token generation. Furthermore, tests must cryptographically verify that JWT claims encode the correct RBAC role (`ADMIN`).
+
+- **What I did instead**:
+  Implemented server-side enforcement where the authentication controller checks `user.isActive` prior to issuing tokens. Added a comprehensive test suite (`backend/tests/auth.test.ts`) that verifies successful admin login, invalid password error handling (preventing enumeration), JWT cryptographic signature and claim verification, inactive account rejection with HTTP 403, and Redis sliding-window rate limit headers.
+
+- **Commit reference**: [Pending Commit - Part 3]
 
 ---

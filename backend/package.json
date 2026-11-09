@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate deploy || prisma db push",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
+    "test:auth": "tsx tests/auth.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
