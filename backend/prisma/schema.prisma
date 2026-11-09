@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ACCOUNT_HOLDER
+  AUDITOR
+}
+
+model User {
+  id           String           @id @default(uuid())
+  fullName     String
+  email        String           @unique
+  passwordHash String
+  role         Role             @default(ACCOUNT_HOLDER)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  accounts     Account[]
+  requests     AccountRequest[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountNumber  String           @unique
+  type           String           @default("PERSONAL")
+  currency       String           @default("INR")
+  balance        BigInt           @default(0)
+  status         String           @default("ACTIVE")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  statementEvents StatementEvent[]
+
+  @@map("accounts")
+}
+
+model AccountRequest {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedType String   @default("PERSONAL")
+  status        String   @default("PENDING")
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("account_requests")
+}
+
+model Transfer {
+  id                      String   @id @default(uuid())
+  sourceAccountId         String?
+  destinationAccountId    String?
+  destinationAccountNumber String?
+  amountPaise             BigInt
+  currency                String   @default("INR")
+  status                  String   @default("POSTED")
+  idempotencyKey          String?  @unique
+  failureReason           String?
+  note                    String?
+  createdAt               DateTime @default(now())
+
+  @@map("transfers")
+}
+
+model StatementEvent {
+  id             String   @id @default(uuid())
+  accountId      String
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  type           String
+  status         String   @default("POSTED")
+  amount         BigInt
+  runningBalance BigInt
+  reference      String?
+  note           String?
+  timestamp      DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@map("statement_events")
+}
+
+model Invitation {
+  id        String   @id @default(uuid())
+  fullName  String
+  email     String
+  role      Role     @default(ACCOUNT_HOLDER)
+  token     String   @unique
+  status    String   @default("PENDING")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("invitations")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  actorId    String?
+  actorEmail String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  ip         String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}
