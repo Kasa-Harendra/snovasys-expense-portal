@@ -13,7 +13,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
     "test:auth": "tsx tests/auth.test.ts",
-    "test:onboarding": "tsx tests/onboarding.test.ts"
+    "test:onboarding": "tsx tests/onboarding.test.ts",
+    "test:admin": "tsx tests/admin.test.ts",
+    "test:browser": "tsx tests/e2e-browser.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
