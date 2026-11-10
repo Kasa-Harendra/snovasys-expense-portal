@@ -16,7 +16,8 @@
     "test:onboarding": "tsx tests/onboarding.test.ts",
     "test:admin": "tsx tests/admin.test.ts",
     "test:browser": "tsx tests/e2e-browser.test.ts",
-    "test:security": "tsx tests/security.test.ts"
+    "test:security": "tsx tests/security.test.ts",
+    "test:all": "npm run test:auth && npm run test:onboarding && npm run test:admin && npm run test:security"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",

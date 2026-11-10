@@ -275,6 +275,29 @@ It also omitted `SIGTERM` graceful connection draining and left Express's defaul
 - Implemented graceful `SIGTERM`/`SIGINT` shutdown draining the HTTP server, Prisma client, and Redis socket cleanly.
 - Added `docker-compose.yml` with PostgreSQL and Redis healthchecks.
 
-- **Commit**: Pending Commit — Part 8
+- **Commit**: [`e7ab6b8`](commit://e7ab6b8)
+
+---
+
+### Requirement: Deployment CI Pipeline & End-to-End Verification
+- **Date**: 2026-11-11
+- **Requirement Reference**: *"Improve deployment monitoring and operational reliability"* & *"Synthetic hackathon demonstration verification"*
+
+#### What I asked for:
+> "Create a GitHub Actions CI workflow that builds both frontend and backend, migrates PostgreSQL, seeds the database, and runs all verification suites automatically."
+
+#### What the tool produced:
+The AI generated a workflow that ran `npm test` directly in a single step without starting PostgreSQL/Redis service containers, running `prisma generate`, or launching the API server prior to executing the HTTP integration tests.
+
+#### What was wrong with it:
+1. **Missing Service Containers & Healthchecks**: Integration and security tests require live PostgreSQL and Redis instances. Running `npm test` without service containers and healthcheck wait conditions causes immediate connection failures.
+2. **Unbuilt Workspace Order**: Running `tsx` or `node dist/index.js` without first generating the Prisma client (`npm run db:generate`) and compiling TypeScript (`npm run build`) fails on missing `@prisma/client` types.
+
+#### What I did instead:
+- Configured `.github/workflows/ci.yml` with `postgres:15-alpine` and `redis:alpine` service containers with explicit `pg_isready` and `redis-cli ping` healthchecks.
+- Sequenced steps cleanly: `npm ci` -> `npm run db:generate` -> `db:push` -> `npm run build` -> `db:seed` & `bootstrap:admin` -> start backend -> verify `/api/ready` -> run unified `npm test`.
+- Added root `"test"` and backend `"test:all"` scripts and documented all test suites and the synthetic-data demonstration notice in `README.md`.
+
+- **Commit**: Included in CI pipeline & unified test suite commit (Part 9)
 
 ---

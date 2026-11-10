@@ -1,0 +1,77 @@
+name: BalanceVault CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: balancevault
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/balancevault?schema=public
+      REDIS_URL: redis://localhost:6380
+      JWT_SECRET: balancevault_ci_secret_key
+      PORT: 3000
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Push database schema
+        run: npm --workspace=backend run db:push
+
+      - name: Build frontend and backend
+        run: npm run build
+
+      - name: Seed database and bootstrap admin
+        run: |
+          npm run db:seed
+          npm --workspace=backend run bootstrap:admin -- --force
+
+      - name: Start backend & run test suites
+        run: |
+          npm start &
+          sleep 3
+          curl -f http://localhost:3000/api/ready
+          npm test

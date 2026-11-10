@@ -16,7 +16,8 @@
     "dev:frontend": "npm --workspace=frontend run dev",
     "dev": "concurrently -k -p \"[{name}]\" -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "npm --workspace=frontend run build && npm --workspace=backend run build",
-    "start": "npm --workspace=backend run start"
+    "start": "npm --workspace=backend run start",
+    "test": "npm --workspace=backend run test:all"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
