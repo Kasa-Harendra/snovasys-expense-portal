@@ -244,6 +244,37 @@ await prisma.$transaction(async (tx) => {
 - Added ownership validation to `GET /api/transfers/:id` and audit logging on unauthorized deposit/withdrawal/transfer attempts.
 - Created `backend/tests/security.test.ts` testing IDOR, mass assignment, input tampering, privilege escalation, idempotency replay, and a 5-way concurrent double-spend attack.
 
-- **Commit**: Pending Commit — Part 7
+- **Commit**: [`ee93ec8`](commit://ee93ec8)
+
+---
+
+### Requirement: Improve Deployment Monitoring and Operational Reliability
+- **Date**: 2026-11-10
+- **Requirement Reference**: *"Improve deployment monitoring and operational reliability"* & *"Backend health and readiness endpoints"*
+
+#### What I asked for:
+> "Add monitoring metrics to `/api/health` and `/api/ready`, security response headers, and graceful server shutdown for container deployments."
+
+#### What the tool produced:
+The AI returned the raw exception message directly in `/api/ready` and the global error handler:
+```typescript
+catch (err: any) {
+  return res.status(503).json({ status: 'not_ready', error: err.message });
+}
+```
+It also omitted `SIGTERM` graceful connection draining and left Express's default `X-Powered-By` fingerprint header enabled.
+
+#### What was wrong with it:
+1. **Information Disclosure in Error Responses**: Returning raw `err.message` from database failures on an unauthenticated `/api/ready` or 500 error response can expose internal PostgreSQL hostnames, connection strings, or stack traces to external attackers.
+2. **Abrupt Connection Drops on Redeploy**: Without `SIGTERM`/`SIGINT` handlers, container restarts abruptly drop active PostgreSQL queries and Redis connections, risking half-finished transactions.
+
+#### What I did instead:
+- Updated `backend/src/routes/health.ts` to measure live `dbLatencyMs` and `redisLatencyMs` while logging internal errors strictly server-side and returning sanitized `not_ready` payloads to callers.
+- Added memory usage (`rssMb`, `heapUsedMb`) and uptime reporting on `/api/health`.
+- Disabled `x-powered-by` and added `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and `Permissions-Policy` headers in `backend/src/index.ts`.
+- Implemented graceful `SIGTERM`/`SIGINT` shutdown draining the HTTP server, Prisma client, and Redis socket cleanly.
+- Added `docker-compose.yml` with PostgreSQL and Redis healthchecks.
+
+- **Commit**: Pending Commit — Part 8
 
 ---
