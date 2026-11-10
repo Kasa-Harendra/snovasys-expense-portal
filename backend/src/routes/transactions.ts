@@ -338,24 +338,45 @@ router.get('/transfers/:id', authenticate, async (req: AuthenticatedRequest, res
     return res.status(404).json({ error: 'Transfer not found.' });
   }
 
+  const [sourceAcc, destAcc] = await Promise.all([
+    transfer.sourceAccountId ? prisma.account.findUnique({ where: { id: transfer.sourceAccountId } }) : null,
+    transfer.destinationAccountId ? prisma.account.findUnique({ where: { id: transfer.destinationAccountId } }) : null,
+  ]);
+
+  const entries: any[] = [];
+  if (sourceAcc) {
+    entries.push({
+      id: `leg-${transfer.id}-src`,
+      amountPaise: (BigInt(transfer.amountPaise) * -1n).toString(),
+      direction: 'DEBIT',
+      account: {
+        id: sourceAcc.id,
+        accountNumber: sourceAcc.accountNumber,
+        type: sourceAcc.type,
+        currencyCode: sourceAcc.currency,
+      },
+    });
+  }
+
+  if (destAcc) {
+    entries.push({
+      id: `leg-${transfer.id}-dest`,
+      amountPaise: transfer.amountPaise.toString(),
+      direction: 'CREDIT',
+      account: {
+        id: destAcc.id,
+        accountNumber: destAcc.accountNumber,
+        type: destAcc.type,
+        currencyCode: destAcc.currency,
+      },
+    });
+  }
+
   return res.status(200).json({
     transfer: {
       ...transfer,
       amountPaise: transfer.amountPaise.toString(),
-      entries: [
-        {
-          id: `leg-${transfer.id}-1`,
-          accountNumber: transfer.sourceAccountId ? 'Source' : 'External',
-          direction: 'DEBIT',
-          amountPaise: transfer.amountPaise.toString(),
-        },
-        {
-          id: `leg-${transfer.id}-2`,
-          accountNumber: transfer.destinationAccountNumber || 'Destination',
-          direction: 'CREDIT',
-          amountPaise: transfer.amountPaise.toString(),
-        },
-      ],
+      entries,
     },
   });
 });

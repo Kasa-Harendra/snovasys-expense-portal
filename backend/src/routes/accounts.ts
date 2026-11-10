@@ -24,7 +24,13 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
     },
   });
 
-  return res.status(200).json({ accounts });
+  return res.status(200).json({
+    accounts: accounts.map((acc) => ({
+      ...acc,
+      currencyCode: acc.currency,
+      balancePaise: acc.balance.toString(),
+    })),
+  });
 });
 
 // 2. Get specific account
@@ -53,7 +59,13 @@ router.get('/:id', authenticate, async (req: AuthenticatedRequest, res: Response
     return res.status(403).json({ error: 'You do not have permission to view this account.' });
   }
 
-  return res.status(200).json({ account });
+  return res.status(200).json({
+    account: {
+      ...account,
+      currencyCode: account.currency,
+      balancePaise: account.balance.toString(),
+    },
+  });
 });
 
 // 3. Get account balance
@@ -63,7 +75,7 @@ router.get('/:id/balance', authenticate, async (req: AuthenticatedRequest, res: 
 
   const account = await prisma.account.findUnique({
     where: { id },
-    select: { id: true, userId: true, balance: true, status: true },
+    select: { id: true, userId: true, balance: true, currency: true, status: true },
   });
 
   if (!account) {
@@ -75,8 +87,9 @@ router.get('/:id/balance', authenticate, async (req: AuthenticatedRequest, res: 
   }
 
   return res.status(200).json({
-    balance: account.balance.toString(),
-    availableBalance: account.balance.toString(),
+    balancePaise: account.balance.toString(),
+    currencyCode: account.currency,
+    availableBalancePaise: account.balance.toString(),
   });
 });
 
@@ -124,7 +137,13 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
     metadata: { accountNumber: account.accountNumber, type: account.type },
   });
 
-  return res.status(201).json({ account });
+  return res.status(201).json({
+    account: {
+      ...account,
+      currencyCode: account.currency,
+      balancePaise: account.balance.toString(),
+    },
+  });
 });
 
 // 5. Account statement events
@@ -152,8 +171,16 @@ router.get('/:id/statement', authenticate, async (req: AuthenticatedRequest, res
   });
 
   return res.status(200).json({
+    account: {
+      id: account.id,
+      accountNumber: account.accountNumber,
+      type: account.type,
+      currencyCode: account.currency,
+      currency: account.currency,
+    },
     events: events.map((ev) => ({
       ...ev,
+      amountPaise: ev.amount.toString(),
       amount: ev.amount.toString(),
       runningBalance: ev.runningBalance.toString(),
     })),

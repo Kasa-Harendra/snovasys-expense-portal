@@ -173,7 +173,7 @@ Created `backend/tests/admin.test.ts` with comprehensive positive and negative t
 4. **Negative RBAC Assertion**: Verified that an `ACCOUNT_HOLDER` calling `GET /api/audit` is immediately rejected with `HTTP 403 Forbidden`.
 5. Verified that administrative actions append immutable records into `audit_logs` storing actor ID, actor email, IP address, user-agent, and structured metadata.
 
-- **Commit**: Pending Commit — Part 5
+- **Commit**: [`f7f9296`](commit://f7f9296)
 
 ---
 
