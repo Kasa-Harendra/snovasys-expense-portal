@@ -200,6 +200,50 @@ Running deep browser runtime diagnostics revealed the real root causes:
 - Updated `backend/src/routes/accounts.ts`, `backend/src/routes/transactions.ts`, and `backend/src/routes/audit.ts` to return both `currency` and `currencyCode`, `balancePaise`, the full `account` envelope on statements, and `{ events: [...] }` on audit logs.
 - Built a permanent headless browser test suite (`backend/tests/e2e-browser.test.ts`) that signs in as both customer and admin, navigates all 13 routes, and confirms zero console errors and clean DOM renders.
 
-- **Commit**: Pending Commit — Part 6
+- **Commit**: [`92bf34b`](commit://92bf34b)
+
+---
+
+### Requirement: Integrity, Security & Threat Model Verification
+- **Date**: 2026-11-10
+- **Requirement Reference**: *"Managing financial accounts and their associated operations requires controlled access, secure authentication, and accountability"*
+
+#### What I asked for:
+> "Write the withdrawal and transfer transaction handlers in `backend/src/routes/transactions.ts` to prevent overdrafts and duplicate transfers, and test them against concurrent attacks."
+
+#### What the tool produced:
+The AI generated a read-then-write balance check:
+```typescript
+const account = await prisma.account.findUnique({ where: { id: accountId } });
+if (account.balance < amount) {
+  return res.status(400).json({ error: 'Insufficient funds' });
+}
+await prisma.$transaction(async (tx) => {
+  await tx.account.update({
+    where: { id: account.id },
+    data: { balance: { decrement: amount } },
+  });
+});
+```
+
+#### What was wrong with it:
+1. **TOCTOU Race Condition (Double-Spend)**: Checking `account.balance < amount` outside the database update permits a classic Time-of-Check to Time-of-Use race condition. If an attacker fires 5 concurrent full-balance withdrawal requests simultaneously, all 5 pass the pre-check before any transaction commits, driving the account balance deeply negative.
+2. **Unsafe Numeric Parsing**: Calling `BigInt(amountPaise)` directly threw an unhandled `SyntaxError` (HTTP 500) on malformed input strings like `"10.50"` or `"abc"`.
+3. **Missing Transfer Detail Authorization**: `GET /api/transfers/:id` did not verify whether the requesting user owned either the source or destination account.
+
+#### What I did instead:
+- Replaced the non-atomic read-then-decrement with an atomic conditional PostgreSQL update inside `prisma.$transaction`:
+  ```typescript
+  const updateResult = await tx.account.updateMany({
+    where: { id: account.id, balance: { gte: amount }, status: 'ACTIVE' },
+    data: { balance: { decrement: amount } },
+  });
+  if (updateResult.count === 0) throw new InsufficientFundsError();
+  ```
+- Added `parsePositivePaise()` regex validation (`/^[1-9]\d*$/`) returning clean HTTP 400 on negative, zero, or decimal strings.
+- Added ownership validation to `GET /api/transfers/:id` and audit logging on unauthorized deposit/withdrawal/transfer attempts.
+- Created `backend/tests/security.test.ts` testing IDOR, mass assignment, input tampering, privilege escalation, idempotency replay, and a 5-way concurrent double-spend attack.
+
+- **Commit**: Pending Commit — Part 7
 
 ---
