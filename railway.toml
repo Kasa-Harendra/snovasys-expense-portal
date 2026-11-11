@@ -3,8 +3,7 @@ builder = "RAILPACK"
 buildCommand = "npm run build"
 
 [deploy]
-preDeployCommand = "npx prisma migrate deploy --schema=backend/prisma/schema.prisma && npm run bootstrap:admin && npm run db:seed"
-startCommand = "npm start"
+startCommand = "npm run start:prod"
 healthcheckPath = "/api/ready"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"

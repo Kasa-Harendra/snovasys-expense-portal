@@ -4,6 +4,18 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  const ifEmpty = process.argv.includes('--if-empty');
+  if (ifEmpty) {
+    const existingDemoUser = await prisma.user.findUnique({
+      where: { email: 'harendrakasa@gmail.com' },
+      select: { id: true },
+    });
+    if (existingDemoUser) {
+      console.log('Seed skipped (--if-empty): demo data already initialized.');
+      return;
+    }
+  }
+
   console.log('Seeding BalanceVault database...');
 
   // 1. Primary User: KASA HARENDRA
@@ -105,24 +117,30 @@ async function main() {
     console.log('Seeded statement events for account 1.');
   }
 
-  // 4. Admin User
-  const adminPasswordHash = await bcrypt.hash('AdminVault2026!', 10);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@balancevault.internal' },
-    update: {
-      fullName: 'System Administrator',
-      passwordHash: adminPasswordHash,
-      role: Role.ADMIN,
-      isActive: true,
-    },
-    create: {
-      fullName: 'System Administrator',
-      email: 'admin@balancevault.internal',
-      passwordHash: adminPasswordHash,
-      role: Role.ADMIN,
-      isActive: true,
-    },
+  // 4. Admin User (preserve existing active admin if already bootstrapped via bootstrap:admin)
+  const existingAdmin = await prisma.user.findFirst({
+    where: { role: Role.ADMIN, isActive: true },
   });
+  let admin = existingAdmin;
+  if (!admin) {
+    const adminPasswordHash = await bcrypt.hash('AdminVault2026!', 10);
+    admin = await prisma.user.upsert({
+      where: { email: 'admin@balancevault.internal' },
+      update: {
+        fullName: 'System Administrator',
+        passwordHash: adminPasswordHash,
+        role: Role.ADMIN,
+        isActive: true,
+      },
+      create: {
+        fullName: 'System Administrator',
+        email: 'admin@balancevault.internal',
+        passwordHash: adminPasswordHash,
+        role: Role.ADMIN,
+        isActive: true,
+      },
+    });
+  }
   console.log(`Admin user ready: ${admin.email}`);
 
   // 5. Auditor User
