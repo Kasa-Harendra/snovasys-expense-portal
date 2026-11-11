@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "npm ci && npm run db:generate && npm run build"
+buildCommand = "npm install --include=dev --no-audit --no-fund && npm run db:generate && npm run build"
 
 [deploy]
 preDeployCommand = "npx prisma migrate deploy --schema=backend/prisma/schema.prisma && npm run bootstrap:admin && npm run db:seed"
