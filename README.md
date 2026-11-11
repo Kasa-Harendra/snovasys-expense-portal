@@ -153,8 +153,8 @@ Individual suites:
 ## Demo Seed Credentials
 
 - **Account Holder**:
-  - Email: `harendrakasa@gmail.com`
-  - Password: `KH20057v@balancev`
+  - Email: `user@email.com`
+  - Password: `User@2026!`
 - **System Administrator**:
   - Email: `admin@balancevault.internal`
   - Password: `AdminVault2026!`

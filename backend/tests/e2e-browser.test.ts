@@ -50,7 +50,7 @@ async function runBrowserE2ETest() {
 
   // 1. Customer Authentication Flow
   console.log('Step 1: Testing customer sign-in on /login...');
-  await signIn(page, 'harendrakasa@gmail.com', 'KH20057v@balancev');
+  await signIn(page, 'user@email.com', 'User@2026!');
 
   assert.strictEqual(page.url(), `${FRONTEND_URL}/dashboard`, 'Customer must be redirected to /dashboard');
   await page.waitForFunction(

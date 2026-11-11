@@ -7,7 +7,7 @@ async function main() {
   const ifEmpty = process.argv.includes('--if-empty');
   if (ifEmpty) {
     const existingDemoUser = await prisma.user.findUnique({
-      where: { email: 'harendrakasa@gmail.com' },
+      where: { email: 'user@email.com' },
       select: { id: true },
     });
     if (existingDemoUser) {
@@ -18,25 +18,34 @@ async function main() {
 
   console.log('Seeding BalanceVault database...');
 
-  // 1. Primary User: KASA HARENDRA
-  const userPasswordHash = await bcrypt.hash('KH20057v@balancev', 10);
-  const user = await prisma.user.upsert({
-    where: { email: 'harendrakasa@gmail.com' },
-    update: {
-      fullName: 'KASA HARENDRA',
-      passwordHash: userPasswordHash,
-      role: Role.ACCOUNT_HOLDER,
-      isActive: true,
-    },
-    create: {
-      id: '140b271c-8257-4e73-a507-efdc748c0f4a',
-      fullName: 'KASA HARENDRA',
-      email: 'harendrakasa@gmail.com',
-      passwordHash: userPasswordHash,
-      role: Role.ACCOUNT_HOLDER,
-      isActive: true,
+  // 1. Primary Demo User (migrates any legacy demo seed row with the same ID if present)
+  const userPasswordHash = await bcrypt.hash('User@2026!', 10);
+  const existingPrimaryUser = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: 'user@email.com' }, { id: '140b271c-8257-4e73-a507-efdc748c0f4a' }],
     },
   });
+  const user = existingPrimaryUser
+    ? await prisma.user.update({
+        where: { id: existingPrimaryUser.id },
+        data: {
+          fullName: 'Demo Account Holder',
+          email: 'user@email.com',
+          passwordHash: userPasswordHash,
+          role: Role.ACCOUNT_HOLDER,
+          isActive: true,
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          id: '140b271c-8257-4e73-a507-efdc748c0f4a',
+          fullName: 'Demo Account Holder',
+          email: 'user@email.com',
+          passwordHash: userPasswordHash,
+          role: Role.ACCOUNT_HOLDER,
+          isActive: true,
+        },
+      });
   console.log(`User created/updated: ${user.email} (${user.id})`);
 
   // 2. Primary User Accounts

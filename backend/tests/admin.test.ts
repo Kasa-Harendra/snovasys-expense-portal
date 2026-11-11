@@ -21,19 +21,19 @@ async function runAdminTests() {
   const custRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'harendrakasa@gmail.com', password: 'KH20057v@balancev' }),
+    body: JSON.stringify({ email: 'user@email.com', password: 'User@2026!' }),
   });
   assert.strictEqual(custRes.status, 200);
   const { accessToken: customerToken } = await custRes.json();
 
   // 3. User Listing & Filtering
   console.log('Step 3: Admin listing users with search filter...');
-  const usersRes = await fetch(`${API_BASE}/admin/users?page=1&perPage=10&search=harendra`, {
+  const usersRes = await fetch(`${API_BASE}/admin/users?page=1&perPage=10&search=user@email.com`, {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
   assert.strictEqual(usersRes.status, 200);
   const usersData = await usersRes.json();
-  assert.ok(usersData.users.length > 0, 'Expected at least 1 user matching harendra');
+  assert.ok(usersData.users.length > 0, 'Expected at least 1 user matching user@email.com');
   const targetUser = usersData.users[0];
   console.log(`✓ Admin user query returned user: ${targetUser.email} (Role: ${targetUser.role})`);
 
