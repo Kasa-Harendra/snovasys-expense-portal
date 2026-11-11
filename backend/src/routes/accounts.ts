@@ -93,22 +93,53 @@ router.get('/:id/balance', authenticate, async (req: AuthenticatedRequest, res: 
   });
 });
 
-// 4. Create new account
+// 4. Create new account (supports admin holder creation or self creation)
 router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  const { type = 'PERSONAL', currency = 'INR', initialBalance = '0' } = req.body;
+  const {
+    accountNumber: requestedNumber,
+    accountType,
+    holderUserId,
+    type = 'PERSONAL',
+    currency = 'INR',
+    initialBalance = '0',
+  } = req.body;
+
+  let targetUserId = user.id;
+  if (holderUserId) {
+    if (user.role !== Role.ADMIN) {
+      return res.status(403).json({ error: 'Your current role cannot create accounts for other users.' });
+    }
+    const holder = await prisma.user.findUnique({ where: { id: String(holderUserId) } });
+    if (!holder || !holder.isActive || holder.role !== Role.ACCOUNT_HOLDER) {
+      return res.status(422).json({
+        error: 'The holder must be an active account holder and the account details must be valid.',
+      });
+    }
+    targetUserId = holder.id;
+  }
+
+  const finalType = String(accountType || type).toUpperCase();
+  if (!['PERSONAL', 'BUSINESS', 'SAVINGS', 'CHECKING'].includes(finalType)) {
+    return res.status(422).json({ error: 'Invalid account type.' });
+  }
 
   const randomSuffix = Math.floor(10000000 + Math.random() * 90000000);
-  const accountNumber = `BV-INR-${randomSuffix}`;
+  const accountNumber = requestedNumber ? String(requestedNumber).trim() : `BV-INR-${randomSuffix}`;
+
+  const existingNumber = await prisma.account.findUnique({ where: { accountNumber } });
+  if (existingNumber) {
+    return res.status(409).json({ error: 'That account number is already in use.' });
+  }
 
   const balancePaise = BigInt(initialBalance || 0);
 
   const account = await prisma.$transaction(async (tx) => {
     const acc = await tx.account.create({
       data: {
-        userId: user.id,
+        userId: targetUserId,
         accountNumber,
-        type: String(type).toUpperCase(),
+        type: finalType,
         currency,
         balance: balancePaise,
         status: 'ACTIVE',
@@ -134,7 +165,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
 
   await logAuditEvent(req, {
     action: 'ACCOUNT_CREATED',
-    metadata: { accountNumber: account.accountNumber, type: account.type },
+    metadata: { accountNumber: account.accountNumber, type: account.type, holderUserId: targetUserId },
   });
 
   return res.status(201).json({
@@ -154,6 +185,11 @@ router.get('/:id/statement', authenticate, async (req: AuthenticatedRequest, res
 
   const account = await prisma.account.findUnique({
     where: { id },
+    include: {
+      user: {
+        select: { role: true },
+      },
+    },
   });
 
   if (!account) {
@@ -178,12 +214,22 @@ router.get('/:id/statement', authenticate, async (req: AuthenticatedRequest, res
       currencyCode: account.currency,
       currency: account.currency,
     },
-    events: events.map((ev) => ({
-      ...ev,
-      amountPaise: ev.amount.toString(),
-      amount: ev.amount.toString(),
-      runningBalance: ev.runningBalance.toString(),
-    })),
+    events: events.map((ev) => {
+      const isDebit =
+        ev.type === 'WITHDRAWAL' ||
+        (ev.type === 'TRANSFER' && !ev.note?.includes('(from '));
+      const signedAmount = isDebit && ev.amount > 0n ? -ev.amount : ev.amount;
+
+      return {
+        ...ev,
+        amountPaise: signedAmount.toString(),
+        amount: ev.amount.toString(),
+        runningBalancePaise: ev.runningBalance.toString(),
+        runningBalance: ev.runningBalance.toString(),
+        refusalReason: ev.status === 'REFUSED' ? 'insufficient_funds' : null,
+        actor: { role: account.user?.role ?? 'ACCOUNT_HOLDER' },
+      };
+    }),
     hasMore: events.length === limit,
   });
 });

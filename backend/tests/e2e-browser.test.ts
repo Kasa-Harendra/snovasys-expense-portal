@@ -1,8 +1,5 @@
 import assert from 'assert';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-const puppeteer = require('/tmp/node_modules/puppeteer-core');
+import puppeteer from 'puppeteer-core';
 
 const FRONTEND_URL = process.env.TEST_FRONTEND_URL || 'http://localhost:5173';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

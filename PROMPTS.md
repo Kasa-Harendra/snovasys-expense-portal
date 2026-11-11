@@ -298,6 +298,30 @@ The AI generated a workflow that ran `npm test` directly in a single step withou
 - Sequenced steps cleanly: `npm ci` -> `npm run db:generate` -> `db:push` -> `npm run build` -> `db:seed` & `bootstrap:admin` -> start backend -> verify `/api/ready` -> run unified `npm test`.
 - Added root `"test"` and backend `"test:all"` scripts and documented all test suites and the synthetic-data demonstration notice in `README.md`.
 
-- **Commit**: Included in CI pipeline & unified test suite commit (Part 9)
+- **Commit**: [`c813a5c`](commit://c813a5c)
+
+---
+
+### Requirement: Readable React Frontend Source & Production Railway Assembly
+- **Date**: 2026-11-11
+- **Requirement Reference**: *"A deployed React-based frontend"* & *"Start the application using the development scripts defined in the root package.json and the individual workspace configurations"*
+
+#### What I asked for:
+> "Replace the prebuilt frontend JS bundles with clean, modular TypeScript React components in `frontend/src/`, assemble the Express backend to serve the compiled SPA, and configure the workspace for Railway deployment."
+
+#### What the tool produced:
+Initially, the frontend workspace relied on static compiled JS chunks inside `frontend/public/assets/`, while the backend assumed `VITE` dev proxy for `/api`, lacked `trust proxy` and `Idempotency-Key` CORS header support, omitted `migration_lock.toml`, and did not include `family: 0` for Railway internal Redis resolution.
+
+#### What was wrong with it:
+1. **Unreadable Prebuilt Bundles**: Relying on prebuilt JS files meant `frontend/src/` had no inspectable React components that could be maintained or explained in a live code walkthrough.
+2. **Production Proxy & CORS Gaps**: Behind Railway's edge proxy, `req.ip` resolved to the proxy IP instead of the client IP (breaking per-IP Redis rate limiting), and CORS omitted `Idempotency-Key` from `allowedHeaders`.
+3. **Database & Ledger Contract Bugs**: Missing `migration_lock.toml` breaks `prisma migrate deploy` on fresh PostgreSQL instances, and statement events returned unsigned `amount` instead of signed `amountPaise` (`-` for debits) and `runningBalancePaise`.
+
+#### What I did instead:
+- Authored full, typed React 18 modules across `frontend/src/` (`AuthContext.tsx`, `Layout.tsx`, `AuthPage.tsx`, `DashboardPage.tsx`, `AccountsPage.tsx`, `FinancialTransactionPage.tsx`, `LedgerPages.tsx`, `AccountRequestsPage.tsx`, `AdminPages.tsx`, `SettingsPages.tsx`).
+- Updated `backend/src/index.ts` to enable `app.set('trust proxy', 1)`, allow `Idempotency-Key` in CORS headers, and serve `frontend/dist` with SPA fallback.
+- Added `family: 0` in `backend/src/redis.ts`, added `migration_lock.toml`, aligned transaction/statement response contracts, and configured `railway.toml` + `.railwayignore`.
+
+- **Commit**: Committed with React TSX source & Railway deployment assembly
 
 ---

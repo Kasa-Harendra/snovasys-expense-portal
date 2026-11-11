@@ -14,7 +14,12 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response) =
     orderBy: { createdAt: 'desc' },
   });
 
-  return res.status(200).json({ requests });
+  return res.status(200).json({
+    requests: requests.map((r) => ({
+      ...r,
+      reviewNote: r.note,
+    })),
+  });
 });
 
 // 2. User: Submit new request

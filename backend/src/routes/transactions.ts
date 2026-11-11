@@ -25,9 +25,19 @@ function parsePositivePaise(value: unknown): bigint | null {
   }
 }
 
+function extractIdempotencyKey(req: AuthenticatedRequest): string | null {
+  const headerKey = req.headers['idempotency-key'];
+  if (typeof headerKey === 'string' && headerKey.trim()) return headerKey.trim();
+  if (typeof req.body?.idempotencyKey === 'string' && req.body.idempotencyKey.trim()) {
+    return req.body.idempotencyKey.trim();
+  }
+  return null;
+}
+
 // 1. Deposits
 router.post('/deposits', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  const { accountId, amountPaise, idempotencyKey, note } = req.body;
+  const { accountId, amountPaise, note } = req.body;
+  const idempotencyKey = extractIdempotencyKey(req);
   const user = req.user!;
 
   if (!accountId || amountPaise === undefined) {
@@ -39,11 +49,7 @@ router.post('/deposits', authenticate, async (req: AuthenticatedRequest, res: Re
     return res.status(400).json({ error: 'Deposit amount must be a positive integer in paise.' });
   }
 
-  // Check account
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-  });
-
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) {
     return res.status(404).json({ error: 'Account not found.', reason: 'account_unavailable' });
   }
@@ -53,29 +59,40 @@ router.post('/deposits', authenticate, async (req: AuthenticatedRequest, res: Re
       action: 'UNAUTHORIZED_DEPOSIT_ATTEMPT',
       metadata: { targetAccountId: accountId },
     });
-    return res.status(403).json({ error: 'You do not have permission to deposit to this account.', reason: 'not_authorized' });
+    return res.status(403).json({
+      error: 'You do not have permission to deposit to this account.',
+      reason: 'not_authorized',
+    });
   }
 
   if (account.status !== 'ACTIVE') {
     return res.status(400).json({ error: 'Account is not active.', reason: 'account_unavailable' });
   }
 
-  // Idempotency check
   if (idempotencyKey) {
-    const existing = await prisma.transfer.findUnique({
-      where: { idempotencyKey },
-    });
+    const existing = await prisma.transfer.findUnique({ where: { idempotencyKey } });
     if (existing) {
-      return res.status(200).json({ message: 'Transaction already processed.', transfer: existing });
+      if (
+        existing.destinationAccountId !== account.id ||
+        existing.sourceAccountId !== null ||
+        existing.amountPaise !== amount
+      ) {
+        return res.status(409).json({ error: 'idempotency_key_conflict' });
+      }
+      return res.status(200).json({
+        status: existing.status,
+        journalTransactionId: existing.id,
+        amountPaise: existing.amountPaise.toString(),
+        message: 'Transaction already processed.',
+        transfer: existing,
+      });
     }
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const updatedAccount = await tx.account.update({
       where: { id: account.id },
-      data: {
-        balance: { increment: amount },
-      },
+      data: { balance: { increment: amount } },
     });
 
     const ref = `DEP-${Date.now().toString().slice(-8)}`;
@@ -109,10 +126,13 @@ router.post('/deposits', authenticate, async (req: AuthenticatedRequest, res: Re
 
   await logAuditEvent(req, {
     action: 'DEPOSIT_PROCESSED',
-    metadata: { accountId, amountPaise: amount.toString() },
+    metadata: { accountId, amountPaise: amount.toString(), journalTransactionId: result.transfer.id },
   });
 
   return res.status(200).json({
+    status: 'POSTED',
+    journalTransactionId: result.transfer.id,
+    amountPaise: amount.toString(),
     message: 'Deposit successful.',
     account: result.updatedAccount,
     transfer: result.transfer,
@@ -121,7 +141,8 @@ router.post('/deposits', authenticate, async (req: AuthenticatedRequest, res: Re
 
 // 2. Withdrawals
 router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  const { accountId, amountPaise, idempotencyKey, note } = req.body;
+  const { accountId, amountPaise, note } = req.body;
+  const idempotencyKey = extractIdempotencyKey(req);
   const user = req.user!;
 
   if (!accountId || amountPaise === undefined) {
@@ -133,10 +154,7 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
     return res.status(400).json({ error: 'Withdrawal amount must be a positive integer in paise.' });
   }
 
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-  });
-
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) {
     return res.status(404).json({ error: 'Account not found.', reason: 'account_unavailable' });
   }
@@ -146,20 +164,33 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
       action: 'UNAUTHORIZED_WITHDRAWAL_ATTEMPT',
       metadata: { targetAccountId: accountId },
     });
-    return res.status(403).json({ error: 'You do not have permission to withdraw from this account.', reason: 'not_authorized' });
+    return res.status(403).json({
+      error: 'You do not have permission to withdraw from this account.',
+      reason: 'not_authorized',
+    });
   }
 
   if (account.status !== 'ACTIVE') {
     return res.status(400).json({ error: 'Account is not active.', reason: 'account_unavailable' });
   }
 
-  // Idempotency check
   if (idempotencyKey) {
-    const existing = await prisma.transfer.findUnique({
-      where: { idempotencyKey },
-    });
+    const existing = await prisma.transfer.findUnique({ where: { idempotencyKey } });
     if (existing) {
-      return res.status(200).json({ message: 'Withdrawal already processed.', transfer: existing });
+      if (
+        existing.sourceAccountId !== account.id ||
+        existing.destinationAccountId !== null ||
+        existing.amountPaise !== amount
+      ) {
+        return res.status(409).json({ error: 'idempotency_key_conflict' });
+      }
+      return res.status(200).json({
+        status: existing.status,
+        journalTransactionId: existing.id,
+        amountPaise: existing.amountPaise.toString(),
+        message: 'Withdrawal already processed.',
+        transfer: existing,
+      });
     }
   }
 
@@ -172,19 +203,14 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
           balance: { gte: amount },
           status: 'ACTIVE',
         },
-        data: {
-          balance: { decrement: amount },
-        },
+        data: { balance: { decrement: amount } },
       });
 
       if (updateResult.count === 0) {
         throw new InsufficientFundsError();
       }
 
-      const updatedAccount = await tx.account.findUniqueOrThrow({
-        where: { id: account.id },
-      });
-
+      const updatedAccount = await tx.account.findUniqueOrThrow({ where: { id: account.id } });
       const ref = `WTH-${Date.now().toString().slice(-8)}`;
 
       const event = await tx.statementEvent.create({
@@ -215,10 +241,13 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
 
     await logAuditEvent(req, {
       action: 'WITHDRAWAL_PROCESSED',
-      metadata: { accountId, amountPaise: amount.toString() },
+      metadata: { accountId, amountPaise: amount.toString(), journalTransactionId: result.transfer.id },
     });
 
     return res.status(200).json({
+      status: 'POSTED',
+      journalTransactionId: result.transfer.id,
+      amountPaise: amount.toString(),
       message: 'Withdrawal successful.',
       account: result.updatedAccount,
       transfer: result.transfer,
@@ -239,6 +268,7 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
       });
 
       return res.status(400).json({
+        status: 'REFUSED',
         error: err.message,
         reason: 'insufficient_funds',
       });
@@ -249,7 +279,8 @@ router.post('/withdrawals', authenticate, async (req: AuthenticatedRequest, res:
 
 // 3. Transfers
 router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  const { sourceAccountId, destinationAccountId, amountPaise, idempotencyKey, note } = req.body;
+  const { sourceAccountId, destinationAccountId, amountPaise, note } = req.body;
+  const idempotencyKey = extractIdempotencyKey(req);
   const user = req.user!;
 
   if (!sourceAccountId || !destinationAccountId || amountPaise === undefined) {
@@ -257,7 +288,10 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
   }
 
   if (sourceAccountId === destinationAccountId) {
-    return res.status(400).json({ error: 'Source and destination accounts must be different.', reason: 'invalid_accounts' });
+    return res.status(400).json({
+      error: 'Source and destination accounts must be different.',
+      reason: 'invalid_accounts',
+    });
   }
 
   const amount = parsePositivePaise(amountPaise);
@@ -279,20 +313,33 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
       action: 'UNAUTHORIZED_TRANSFER_ATTEMPT',
       metadata: { sourceAccountId, destinationAccountId },
     });
-    return res.status(403).json({ error: 'You do not have permission to transfer from this account.', reason: 'not_authorized' });
+    return res.status(403).json({
+      error: 'You do not have permission to transfer from this account.',
+      reason: 'not_authorized',
+    });
   }
 
   if (source.status !== 'ACTIVE' || destination.status !== 'ACTIVE') {
     return res.status(400).json({ error: 'One of the accounts is not active.', reason: 'account_unavailable' });
   }
 
-  // Idempotency check
   if (idempotencyKey) {
-    const existing = await prisma.transfer.findUnique({
-      where: { idempotencyKey },
-    });
+    const existing = await prisma.transfer.findUnique({ where: { idempotencyKey } });
     if (existing) {
-      return res.status(200).json({ message: 'Transfer already completed.', transfer: existing });
+      if (
+        existing.sourceAccountId !== source.id ||
+        existing.destinationAccountId !== destination.id ||
+        existing.amountPaise !== amount
+      ) {
+        return res.status(409).json({ error: 'idempotency_key_conflict' });
+      }
+      return res.status(200).json({
+        status: existing.status,
+        journalTransactionId: existing.id,
+        amountPaise: existing.amountPaise.toString(),
+        message: 'Transfer already completed.',
+        transfer: existing,
+      });
     }
   }
 
@@ -300,7 +347,6 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // Atomic conditional debit prevents TOCTOU race conditions
       const updateResult = await tx.account.updateMany({
         where: {
           id: source.id,
@@ -315,7 +361,6 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
       }
 
       const updatedSource = await tx.account.findUniqueOrThrow({ where: { id: source.id } });
-
       const updatedDestination = await tx.account.update({
         where: { id: destination.id },
         data: { balance: { increment: amount } },
@@ -372,6 +417,9 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
     });
 
     return res.status(200).json({
+      status: 'POSTED',
+      journalTransactionId: result.transfer.id,
+      amountPaise: amount.toString(),
       message: 'Transfer completed successfully.',
       transfer: result.transfer,
     });
@@ -391,6 +439,7 @@ router.post('/transfers', authenticate, async (req: AuthenticatedRequest, res: R
       });
 
       return res.status(400).json({
+        status: 'REFUSED',
         error: err.message,
         reason: 'insufficient_funds',
       });
@@ -404,10 +453,7 @@ router.get('/transfers/:id', authenticate, async (req: AuthenticatedRequest, res
   const { id } = req.params;
   const user = req.user!;
 
-  const transfer = await prisma.transfer.findUnique({
-    where: { id },
-  });
-
+  const transfer = await prisma.transfer.findUnique({ where: { id } });
   if (!transfer) {
     return res.status(404).json({ error: 'Transfer not found.' });
   }
@@ -458,6 +504,7 @@ router.get('/transfers/:id', authenticate, async (req: AuthenticatedRequest, res
   return res.status(200).json({
     transfer: {
       ...transfer,
+      type: 'TRANSFER',
       amountPaise: transfer.amountPaise.toString(),
       entries,
     },

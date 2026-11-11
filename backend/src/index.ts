@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import http from 'http';
+import path from 'path';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
@@ -19,6 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 // Security headers
 app.use((_req, res, next) => {
@@ -35,7 +38,7 @@ app.use(
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Idempotency-Key'],
   })
 );
 
@@ -49,7 +52,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Routes
+// API Routes
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -59,10 +62,19 @@ app.use('/api/account-requests', accountRequestsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/audit', auditRoutes);
 
-// Fallback 404
+// API Fallback 404
 app.use('/api/*', (_req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
+
+// Serve compiled React SPA from frontend/dist in unified/production deployments
+const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -103,6 +115,9 @@ async function startServer() {
     server = app.listen(PORT, () => {
       console.log(`✓ BalanceVault Backend API listening on http://localhost:${PORT}`);
       console.log(`✓ Health endpoint: http://localhost:${PORT}/api/ready`);
+      if (fs.existsSync(frontendDistPath)) {
+        console.log(`✓ Serving React SPA from ${frontendDistPath}`);
+      }
     });
   } catch (err) {
     console.error('Fatal server startup error:', err);

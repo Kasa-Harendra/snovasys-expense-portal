@@ -96,7 +96,13 @@ router.get('/invitations', authenticate, requireRole([Role.ADMIN]), async (req: 
     take: 50,
   });
 
-  return res.status(200).json({ invitations });
+  return res.status(200).json({
+    invitations: invitations.map((inv) => ({
+      ...inv,
+      acceptedAt: inv.status === 'ACCEPTED' ? inv.createdAt : null,
+      revokedAt: inv.status === 'REVOKED' ? inv.createdAt : null,
+    })),
+  });
 });
 
 // 4. Create invitation
