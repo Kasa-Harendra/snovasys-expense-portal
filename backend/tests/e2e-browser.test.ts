@@ -2,7 +2,28 @@ import assert from 'assert';
 import puppeteer from 'puppeteer-core';
 
 const FRONTEND_URL = process.env.TEST_FRONTEND_URL || 'http://localhost:5173';
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function visitAndAssertHeading(page: any, url: string, expectedHeading: string) {
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    (expected: string) => {
+      const h1 = document.querySelector('h1');
+      return Boolean(h1 && h1.textContent && h1.textContent.trim() === expected);
+    },
+    { timeout: 15000 },
+    expectedHeading
+  );
+  return page.$eval('h1', (el: any) => el.innerText.trim());
+}
+
+async function signIn(page: any, email: string, password: string) {
+  await page.goto(`${FRONTEND_URL}/login`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('input[type="email"]', { timeout: 15000 });
+  await page.type('input[type="email"]', email);
+  await page.type('input[type="password"]', password);
+  await page.click('button[type="submit"]');
+  await page.waitForFunction(() => !window.location.pathname.startsWith('/login'), { timeout: 15000 });
+}
 
 async function runBrowserE2ETest() {
   console.log('--- Running Automated End-to-End Browser Test Suite ---');
@@ -29,14 +50,16 @@ async function runBrowserE2ETest() {
 
   // 1. Customer Authentication Flow
   console.log('Step 1: Testing customer sign-in on /login...');
-  await page.goto(`${FRONTEND_URL}/login`, { waitUntil: 'domcontentloaded' });
-  await sleep(1000);
-  await page.type('input[type="email"]', 'harendrakasa@gmail.com');
-  await page.type('input[type="password"]', 'KH20057v@balancev');
-  await page.click('button[type="submit"]');
-  await sleep(2500);
+  await signIn(page, 'harendrakasa@gmail.com', 'KH20057v@balancev');
 
   assert.strictEqual(page.url(), `${FRONTEND_URL}/dashboard`, 'Customer must be redirected to /dashboard');
+  await page.waitForFunction(
+    () => {
+      const h = document.querySelector('h1, h2');
+      return Boolean(h && h.textContent && h.textContent.includes('Good to see you'));
+    },
+    { timeout: 15000 }
+  );
   const dashboardHeading = await page.$eval('h1, h2', (el: any) => el.innerText);
   assert.ok(dashboardHeading.includes('Good to see you'), 'Dashboard must display customer greeting');
   console.log(`✓ Customer dashboard verified: "${dashboardHeading}"`);
@@ -44,71 +67,50 @@ async function runBrowserE2ETest() {
   // 2. Accounts View
   console.log('Step 2: Testing /accounts view...');
   await page.goto(`${FRONTEND_URL}/accounts`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
+  await page.waitForFunction(() => document.body.innerText.includes('BV-INR-'), { timeout: 15000 });
   const accountsText = await page.evaluate(() => document.body.innerText);
   assert.ok(accountsText.includes('BV-INR-'), 'Accounts view must display active accounts');
   console.log('✓ Accounts page rendered active accounts.');
 
   // 3. Statements View
   console.log('Step 3: Testing /statements view...');
-  await page.goto(`${FRONTEND_URL}/statements`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const statementsHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const statementsHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/statements`, 'Account statements');
   assert.strictEqual(statementsHeading, 'Account statements');
   console.log('✓ Statements page rendered successfully.');
 
   // 4. Financial Transactions View (Deposit / Withdrawal / Transfer)
   console.log('Step 4: Testing financial transaction views...');
-  await page.goto(`${FRONTEND_URL}/transactions/deposit`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const depositHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const depositHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/transactions/deposit`, 'Deposit');
   assert.strictEqual(depositHeading, 'Deposit');
 
-  await page.goto(`${FRONTEND_URL}/transactions/withdrawal`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const withdrawHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const withdrawHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/transactions/withdrawal`, 'Withdrawal');
   assert.strictEqual(withdrawHeading, 'Withdrawal');
 
-  await page.goto(`${FRONTEND_URL}/transactions/transfer`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const transferHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const transferHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/transactions/transfer`, 'Transfer');
   assert.strictEqual(transferHeading, 'Transfer');
   console.log('✓ Deposit, withdrawal, and transfer pages rendered without errors.');
 
   // 5. Account Onboarding Request View
   console.log('Step 5: Testing /account-requests view...');
-  await page.goto(`${FRONTEND_URL}/account-requests`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const reqHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const reqHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/account-requests`, 'Account request');
   assert.strictEqual(reqHeading, 'Account request');
   console.log('✓ Account requests view verified.');
 
   // 6. Admin Authentication & Admin Views
   console.log('Step 6: Testing admin sign-in and management views...');
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto(`${FRONTEND_URL}/login`, { waitUntil: 'domcontentloaded' });
-  await sleep(1000);
-  await page.type('input[type="email"]', 'admin@balancevault.internal');
-  await page.type('input[type="password"]', 'AdminVault2026!');
-  await page.click('button[type="submit"]');
-  await sleep(2500);
+  await signIn(page, 'admin@balancevault.internal', 'AdminVault2026!');
 
   // Admin Users
-  await page.goto(`${FRONTEND_URL}/admin/users`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const adminUsersHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const adminUsersHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/admin/users`, 'User management');
   assert.strictEqual(adminUsersHeading, 'User management');
 
   // Admin Onboarding
-  await page.goto(`${FRONTEND_URL}/admin/onboarding`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const onboardingHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const onboardingHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/admin/onboarding`, 'Account onboarding');
   assert.strictEqual(onboardingHeading, 'Account onboarding');
 
   // Audit Log
-  await page.goto(`${FRONTEND_URL}/audit`, { waitUntil: 'domcontentloaded' });
-  await sleep(1500);
-  const auditHeading = await page.$eval('h1', (el: any) => el.innerText);
+  const auditHeading = await visitAndAssertHeading(page, `${FRONTEND_URL}/audit`, 'Audit log');
   assert.strictEqual(auditHeading, 'Audit log');
   console.log('✓ Admin users, onboarding queue, and audit log pages rendered successfully.');
 

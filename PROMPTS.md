@@ -322,6 +322,31 @@ Initially, the frontend workspace relied on static compiled JS chunks inside `fr
 - Updated `backend/src/index.ts` to enable `app.set('trust proxy', 1)`, allow `Idempotency-Key` in CORS headers, and serve `frontend/dist` with SPA fallback.
 - Added `family: 0` in `backend/src/redis.ts`, added `migration_lock.toml`, aligned transaction/statement response contracts, and configured `railway.toml` + `.railwayignore`.
 
-- **Commit**: Committed with React TSX source & Railway deployment assembly
+- **Commit**: [`6f1cda8`](commit://6f1cda8)
+
+---
+
+### Requirement: Production Railway Startup, Idempotent Seeding & Live Verification
+- **Date**: 2026-11-11
+- **Requirement Reference**: *"Improve deployment monitoring and operational reliability"* & *"Complete browser-based testing of the deployed application"*
+
+#### What I asked for:
+> "Deploy the unified React + Express app to Railway with managed PostgreSQL and Redis, run database migrations and admin bootstrap automatically, and verify all APIs and routes against the live public URL."
+
+#### What the tool produced:
+1. Initial `railway.toml` placed migrations and seeding inside `preDeployCommand = "npx prisma migrate deploy ... && ..."` as a single TOML string while `auth.ts` lacked `try/catch` wrappers on async Express 4 handlers.
+2. Unconditional `db:seed` reset demo balances on every run, and `backend/tests/e2e-browser.test.ts` relied on fixed `sleep(1500)` timeouts between lazy-loaded React routes.
+
+#### What was wrong with it:
+1. **Silent Pre-Deploy Miss & Process Crash (`P2021`)**: Railway Config-as-Code requires array syntax for `preDeployCommand`; with a string value, migrations did not run, leaving `public.users` missing at runtime. Calling `POST /api/auth/login` threw Prisma `P2021` without `try/catch`, crashing the Express process with an unhandled promise rejection (`502`).
+2. **State Overwrites & Remote Latency Flakiness**: Re-running `seed.ts` unconditionally resets existing account balances, and fixed `1500ms` sleeps fail over remote HTTPS when lazy React chunks and API calls are in flight.
+
+#### What I did instead:
+- Replaced the invalid `preDeployCommand` string in `railway.toml` with `startCommand = "npm run start:prod"`, backed by root `start:prod` (`prisma migrate deploy` -> `bootstrap:admin` -> `db:seed -- --if-empty` -> `npm start`).
+- Added `--if-empty` to `backend/prisma/seed.ts` and preserved any active bootstrapped administrator account.
+- Wrapped `/login`, `/register`, `/accept-invitation`, and `/change-password` async handlers in `backend/src/routes/auth.ts` with `try/catch` forwarding errors to Express's global error handler (`next(err)`).
+- Updated `backend/tests/e2e-browser.test.ts` to wait on actual DOM heading/selector readiness (`waitForFunction` / `waitForSelector`) and verified the live deployment (`https://balancevault-app-production.up.railway.app`) with 0 console/page errors.
+
+- **Commit**: [`90eec0d`](commit://90eec0d)
 
 ---
